@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>睡眠统计</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f0f12;
+    color: #e8e8e8;
+    font-family: 'SF Pro Display', -apple-system, 'PingFang SC', sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  .container { max-width: 980px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .title { font-size: 18px; font-weight: 600; color: #fff; letter-spacing: 0.04em; }
+  .week-nav { display: flex; align-items: center; gap: 12px; }
+  .week-label {
+    font-size: 13px; color: #888; min-width: 160px;
+    text-align: center; letter-spacing: 0.02em;
+  }
+  .nav-btn {
+    background: #1e1e24; border: 1px solid #2a2a32; color: #aaa;
+    width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover { background: #2a2a32; color: #fff; }
+
+  /* Loading / Error */
+  .status-bar {
+    text-align: center; font-size: 12px; color: #555;
+    height: 20px; margin-bottom: 8px; letter-spacing: 0.04em;
+  }
+  .status-bar.error { color: #ff6b6b; }
+
+  /* Chart */
+  .chart-wrapper { display: flex; gap: 0; align-items: flex-start; }
+  .y-axis { display: flex; flex-direction: column; padding-top: 24px; flex-shrink: 0; }
+  .y-label {
+    height: 46px; display: flex; align-items: center; justify-content: flex-end;
+    padding-right: 10px; font-size: 11px; color: #666; cursor: pointer;
+    transition: color 0.15s; white-space: nowrap; letter-spacing: 0.03em;
+    gap: 6px;
+  }
+  .y-label:hover { color: #F5EC00; }
+  .y-date { color: #444; font-size: 10px; }
+
+  .grid-area { flex: 1; overflow-x: auto; }
+  .x-axis { display: flex; margin-bottom: 4px; height: 24px; }
+  .x-label { flex: 1; text-align: center; font-size: 10px; color: #555; letter-spacing: 0.01em; }
+
+  .grid { display: flex; flex-direction: column; gap: 3px; min-width: 620px; }
+  .grid-row { display: flex; gap: 2px; height: 46px; }
+  .cell {
+    flex: 1; height: 46px; background: #1a1a20; border-radius: 3px;
+    position: relative; cursor: pointer; transition: background 0.15s; overflow: hidden;
+  }
+  .cell:hover { background: #252530; }
+  .cell-fill {
+    position: absolute; top: 0; bottom: 0;
+    background: #F5EC00; opacity: 0;
+    transition: opacity 0.2s; pointer-events: none;
+  }
+  .cell-fill.active { opacity: 0.88; }
+
+  .time-marker {
+    position: absolute; top: 3px; font-size: 9px;
+    color: #0f0f12; font-weight: 700; white-space: nowrap;
+    z-index: 10; pointer-events: none; letter-spacing: -0.01em;
+  }
+  .marker-start { left: 3px; }
+  .marker-end { right: 3px; }
+  .duration-badge {
+    position: absolute; bottom: 3px; right: 3px;
+    font-size: 8px; font-weight: 700; color: #0f0f12;
+    background: rgba(0,0,0,0.12); padding: 1px 3px; border-radius: 2px;
+    pointer-events: none; z-index: 10;
+  }
+  .score-badge {
+    position: absolute; bottom: 3px; left: 3px;
+    font-size: 8px; font-weight: 700; color: #0f0f12;
+    background: rgba(0,0,0,0.12); padding: 1px 4px; border-radius: 2px;
+    pointer-events: none; z-index: 10;
+  }
+
+  /* Stats */
+  .stats-bar {
+    display: flex; gap: 20px; margin-top: 20px;
+    padding: 14px 18px; background: #1a1a20;
+    border-radius: 10px; border: 1px solid #22222a;
+  }
+  .stat-item { display: flex; flex-direction: column; gap: 4px; }
+  .stat-label { font-size: 10px; color: #555; letter-spacing: 0.05em; text-transform: uppercase; }
+  .stat-value { font-size: 16px; font-weight: 600; color: #F5EC00; }
+  .stat-value.dim { color: #888; font-size: 13px; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.72); z-index: 100;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #16161c; border: 1px solid #2a2a35;
+    border-radius: 14px; padding: 28px; width: 320px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  }
+  .modal-title { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .modal-subtitle { font-size: 11px; color: #555; margin-bottom: 20px; }
+  .field-group { margin-bottom: 14px; }
+  .field-label { font-size: 11px; color: #888; margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .field-input {
+    width: 100%; background: #0f0f12; border: 1px solid #2a2a35;
+    border-radius: 8px; color: #fff; font-size: 15px;
+    padding: 10px 12px; outline: none; transition: border-color 0.15s;
+    font-family: inherit; letter-spacing: 0.04em;
+  }
+  .field-input:focus { border-color: #F5EC00; }
+  .field-hint { font-size: 10px; color: #555; margin-top: 5px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 22px; }
+  .btn {
+    flex: 1; padding: 10px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    border: none; transition: all 0.15s; letter-spacing: 0.03em;
+  }
+  .btn-primary { background: #F5EC00; color: #0f0f12; }
+  .btn-primary:hover { background: #ffe900; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: #1e1e28; color: #888; border: 1px solid #2a2a35; }
+  .btn-secondary:hover { color: #fff; }
+  .btn-danger { background: transparent; color: #ff4444; border: 1px solid #ff444433; flex: 0; padding: 10px 14px; }
+  .btn-danger:hover { background: #ff444415; }
+  .error-msg { font-size: 11px; color: #ff6b6b; margin-top: 8px; min-height: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title">睡眠统计</div>
+    <div class="week-nav">
+      <button class="nav-btn" id="prevWeek">&#8249;</button>
+      <div class="week-label" id="weekLabel"></div>
+      <button class="nav-btn" id="nextWeek">&#8250;</button>
+    </div>
+  </div>
+  <div class="status-bar" id="statusBar"></div>
+  <div class="chart-wrapper">
+    <div class="y-axis" id="yAxis"></div>
+    <div class="grid-area">
+      <div class="x-axis" id="xAxis"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+  <div class="stats-bar">
+    <div class="stat-item"><div class="stat-label">本周均值</div><div class="stat-value" id="statAvg">—</div></div>
+    <div class="stat-item"><div class="stat-label">总睡眠</div><div class="stat-value" id="statTotal">—</div></div>
+    <div class="stat-item"><div class="stat-label">平均评分</div><div class="stat-value" id="statScore">—</div></div>
+    <div class="stat-item"><div class="stat-label">最佳夜晚</div><div class="stat-value dim" id="statBest">—</div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-subtitle" id="modalSubtitle"></div>
+    <div class="field-group">
+      <div class="field-label">入睡时间</div>
+      <input class="field-input" id="inputStart" placeholder="例：22:30" maxlength="5" autocomplete="off">
+      <div class="field-hint">21:00 之后为当晚，10:00 之前为次日</div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">起床时间</div>
+      <input class="field-input" id="inputEnd" placeholder="例：07:00" maxlength="5" autocomplete="off">
+    </div>
+    <div class="field-group">
+      <div class="field-label">睡眠评分（0–100）</div>
+      <input class="field-input" id="inputScore" placeholder="0 – 100" maxlength="3" autocomplete="off">
+    </div>
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="btnDelete" style="display:none">删除</button>
+      <button class="btn btn-secondary" id="btnCancel">取消</button>
+      <button class="btn btn-primary" id="btnSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Config ───────────────────────────────────────────────────────────────────
+const HOUR_START = 21;
+const HOUR_COUNT = 13; // 21:00 ~ 10:00
+const DAYS = ['周一','周二','周三','周四','周五','周六','周日'];
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let weekOffset = 0;
+let weekCache = {};     // key → { dayIndex → { pageId, start, end, score } }
+let editingDay = null;  // { wKey, dayIndex, date }
+
+// ─── API helpers ─────────────────────────────────────────────────────────────
+async function apiFetch(method, body) {
+  const url = '/api/notion';
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (method === 'GET') {
+    const params = new URLSearchParams(body);
+    const r = await fetch(`${url}?${params}`);
+    return r.json();
+  }
+  opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+// ─── Week utils ───────────────────────────────────────────────────────────────
+function getWeekMonday(offset = 0) {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff + offset * 7);
+  d.setHours(0,0,0,0);
+  return d;
+}
+function weekKey(monday) { return monday.toISOString().slice(0,10); }
+function formatWeekLabel(monday) {
+  const end = new Date(monday); end.setDate(end.getDate()+6);
+  const fmt = d => `${d.getMonth()+1}月${d.getDate()}日`;
+  return `${monday.getFullYear()}年 ${fmt(monday)} — ${fmt(end)}`;
+}
+function getWeekDates(monday) {
+  return Array.from({length:7}, (_,i) => {
+    const d = new Date(monday); d.setDate(d.getDate()+i); return d;
+  });
+}
+function dateStr(d) { return d.toISOString().slice(0,10); }
+
+// ─── Time utils ───────────────────────────────────────────────────────────────
+function timeToMins(str) {
+  const [h, m] = str.split(':').map(Number);
+  let mins = h * 60 + m;
+  if (h < 11) mins += 24 * 60;
+  return mins - HOUR_START * 60;
+}
+function durationStr(mins) {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m > 0 ? `${h}h${m}m` : `${h}h`;
+}
+function parseTimeInput(str) {
+  str = str.trim();
+  if (/^\d{3,4}$/.test(str)) str = str.slice(0,-2) + ':' + str.slice(-2);
+  if (!/^\d{1,2}:\d{2}$/.test(str)) return null;
+  const [h, m] = str.split(':').map(Number);
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+// ─── Status bar ───────────────────────────────────────────────────────────────
+function setStatus(msg, isError = false) {
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  el.className = 'status-bar' + (isError ? ' error' : '');
+}
+
+// ─── Load week from Notion ────────────────────────────────────────────────────
+async function loadWeek(monday) {
+  const key = weekKey(monday);
+  if (weekCache[key]) return; // already loaded
+
+  setStatus('加载中…');
+  const dates = getWeekDates(monday);
+  const start = dateStr(dates[0]);
+  const end = dateStr(dates[6]);
+
+  try {
+    const data = await apiFetch('GET', { start, end });
+    if (data.object === 'error') throw new Error(data.message);
+
+    weekCache[key] = {};
+    for (const page of (data.results || [])) {
+      const props = page.properties;
+      const dateVal = props['日期']?.date?.start;
+      if (!dateVal) continue;
+
+      // Find which day index this date corresponds to
+      const di = dates.findIndex(d => dateStr(d) === dateVal);
+      if (di === -1) continue;
+
+      const startTime = props['入睡时间']?.rich_text?.[0]?.text?.content || '';
+      const endTime   = props['起床时间']?.rich_text?.[0]?.text?.content || '';
+      const score     = props['评分']?.number ?? '';
+
+      weekCache[key][di] = { pageId: page.id, start: startTime, end: endTime, score };
+    }
+    setStatus('');
+  } catch(e) {
+    setStatus('加载失败：' + e.message, true);
+    weekCache[key] = {};
+  }
+}
+
+// ─── X axis ───────────────────────────────────────────────────────────────────
+function buildXAxis() {
+  const el = document.getElementById('xAxis');
+  el.innerHTML = '';
+  for (let i = 0; i < HOUR_COUNT; i++) {
+    const h = (HOUR_START + i) % 24;
+    const label = document.createElement('div');
+    label.className = 'x-label';
+    label.textContent = `${String(h).padStart(2,'0')}:00`;
+    el.appendChild(label);
+  }
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  const monday = getWeekMonday(weekOffset);
+  const key = weekKey(monday);
+  document.getElementById('weekLabel').textContent = formatWeekLabel(monday);
+  const weekData = weekCache[key] || {};
+  const dates = getWeekDates(monday);
+
+  // Y axis
+  const yAxis = document.getElementById('yAxis');
+  yAxis.innerHTML = '';
+  DAYS.forEach((day, di) => {
+    const d = dates[di];
+    const lbl = document.createElement('div');
+    lbl.className = 'y-label';
+    lbl.innerHTML = `<span class="y-date">${d.getMonth()+1}/${d.getDate()}</span>${day}`;
+    lbl.addEventListener('click', () => openModal(key, di, dateStr(d)));
+    yAxis.appendChild(lbl);
+  });
+
+  // Grid
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  DAYS.forEach((_, di) => {
+    const row = document.createElement('div');
+    row.className = 'grid-row';
+    const entry = weekData[di];
+    let startMins = null, endMins = null;
+    if (entry && entry.start && entry.end) {
+      startMins = timeToMins(entry.start);
+      endMins   = timeToMins(entry.end);
+    }
+
+    for (let ci = 0; ci < HOUR_COUNT; ci++) {
+      const cellStart = ci * 60;
+      const cellEnd   = (ci + 1) * 60;
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.addEventListener('click', () => openModal(key, di, dateStr(dates[di])));
+
+      if (startMins !== null && endMins !== null) {
+        const oStart = Math.max(startMins, cellStart);
+        const oEnd   = Math.min(endMins, cellEnd);
+        if (oEnd > oStart) {
+          const fill = document.createElement('div');
+          fill.className = 'cell-fill active';
+          fill.style.left  = ((oStart - cellStart) / 60 * 100) + '%';
+          fill.style.right = ((cellEnd - oEnd)     / 60 * 100) + '%';
+          cell.appendChild(fill);
+
+          if (oStart === startMins) {
+            const mk = document.createElement('div');
+            mk.className = 'time-marker marker-start';
+            mk.textContent = entry.start;
+            cell.appendChild(mk);
+            if (entry.score !== '') {
+              const sb = document.createElement('div');
+              sb.className = 'score-badge';
+              sb.textContent = entry.score;
+              cell.appendChild(sb);
+            }
+          }
+          if (oEnd === endMins) {
+            const mk = document.createElement('div');
+            mk.className = 'time-marker marker-end';
+            mk.textContent = entry.end;
+            cell.appendChild(mk);
+            const db = document.createElement('div');
+            db.className = 'duration-badge';
+            db.textContent = durationStr(endMins - startMins);
+            cell.appendChild(db);
+          }
+        }
+      }
+      row.appendChild(cell);
+    }
+    grid.appendChild(row);
+  });
+
+  updateStats(weekData);
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+function updateStats(weekData) {
+  const entries = Object.values(weekData).filter(e => e && e.start && e.end);
+  if (!entries.length) {
+    ['statAvg','statTotal','statScore','statBest'].forEach(id => document.getElementById(id).textContent = '—');
+    return;
+  }
+  const durations = entries.map(e => timeToMins(e.end) - timeToMins(e.start));
+  const total = durations.reduce((a,b)=>a+b,0);
+  document.getElementById('statAvg').textContent   = durationStr(Math.round(total / entries.length));
+  document.getElementById('statTotal').textContent = durationStr(total);
+  const scores = entries.filter(e => e.score !== '').map(e => Number(e.score));
+  document.getElementById('statScore').textContent = scores.length
+    ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : '—';
+  const maxIdx = durations.indexOf(Math.max(...durations));
+  const dayKeys = Object.keys(weekData).map(Number);
+  document.getElementById('statBest').textContent = DAYS[dayKeys[maxIdx]] + ' ' + durationStr(durations[maxIdx]);
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+function openModal(wKey, dayIndex, date) {
+  editingDay = { wKey, dayIndex, date };
+  const weekData = weekCache[wKey] || {};
+  const entry = weekData[dayIndex];
+  document.getElementById('modalTitle').textContent = `${DAYS[dayIndex]} · 睡眠记录`;
+  document.getElementById('modalSubtitle').textContent = date;
+  document.getElementById('inputStart').value = entry?.start || '';
+  document.getElementById('inputEnd').value   = entry?.end   || '';
+  document.getElementById('inputScore').value = entry?.score ?? '';
+  document.getElementById('errorMsg').textContent = '';
+  document.getElementById('btnDelete').style.display = entry ? 'block' : 'none';
+  document.getElementById('btnSave').disabled = false;
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('inputStart').focus();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  editingDay = null;
+}
+
+document.getElementById('btnCancel').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+});
+
+document.getElementById('btnDelete').addEventListener('click', async () => {
+  if (!editingDay) return;
+  const entry = (weekCache[editingDay.wKey] || {})[editingDay.dayIndex];
+  if (!entry) return;
+  setStatus('删除中…');
+  closeModal();
+  try {
+    await apiFetch('DELETE', { pageId: entry.pageId });
+    delete weekCache[editingDay?.wKey]?.[editingDay?.dayIndex];
+    // force reload
+    delete weekCache[editingDay?.wKey];
+  } catch(e) { setStatus('删除失败', true); }
+  await loadWeek(getWeekMonday(weekOffset));
+  render();
+});
+
+document.getElementById('btnSave').addEventListener('click', saveEntry);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Enter' && document.getElementById('modalOverlay').classList.contains('open')) saveEntry();
+});
+
+['inputStart','inputEnd'].forEach(id => {
+  document.getElementById(id).addEventListener('input', function() {
+    let v = this.value.replace(/[^0-9:]/g,'');
+    if (v.length === 2 && !v.includes(':') && this._prev?.length === 1) v += ':';
+    this.value = v; this._prev = v;
+  });
+});
+
+async function saveEntry() {
+  const errEl = document.getElementById('errorMsg');
+  const start = parseTimeInput(document.getElementById('inputStart').value);
+  const end   = parseTimeInput(document.getElementById('inputEnd').value);
+  const rawScore = document.getElementById('inputScore').value.trim();
+
+  if (!start) { errEl.textContent = '入睡时间格式有误，请使用 HH:MM'; return; }
+  if (!end)   { errEl.textContent = '起床时间格式有误，请使用 HH:MM'; return; }
+
+  const sm = timeToMins(start), em = timeToMins(end);
+  if (sm < 0 || sm >= HOUR_COUNT * 60) { errEl.textContent = '入睡时间需在 21:00 ~ 次日 10:00 之间'; return; }
+  if (em <= sm) { errEl.textContent = '起床时间需晚于入睡时间'; return; }
+  if (em > HOUR_COUNT * 60) { errEl.textContent = '起床时间需在 10:00 之前'; return; }
+
+  let score = '';
+  if (rawScore !== '') {
+    const s = Number(rawScore);
+    if (isNaN(s) || s < 0 || s > 100) { errEl.textContent = '评分需在 0–100 之间'; return; }
+    score = s;
+  }
+
+  document.getElementById('btnSave').disabled = true;
+  setStatus('保存中…');
+
+  const existing = (weekCache[editingDay.wKey] || {})[editingDay.dayIndex];
+  try {
+    await apiFetch('POST', {
+      pageId: existing?.pageId || null,
+      date: editingDay.date,
+      sleepStart: start,
+      sleepEnd: end,
+      score,
+    });
+    delete weekCache[editingDay.wKey]; // force reload
+    closeModal();
+    await loadWeek(getWeekMonday(weekOffset));
+    render();
+  } catch(e) {
+    setStatus('保存失败：' + e.message, true);
+    document.getElementById('btnSave').disabled = false;
+  }
+}
+
+// ─── Week nav ─────────────────────────────────────────────────────────────────
+document.getElementById('prevWeek').addEventListener('click', async () => {
+  weekOffset--; await loadWeek(getWeekMonday(weekOffset)); render();
+});
+document.getElementById('nextWeek').addEventListener('click', async () => {
+  weekOffset++; await loadWeek(getWeekMonday(weekOffset)); render();
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+buildXAxis();
+(async () => {
+  await loadWeek(getWeekMonday(weekOffset));
+  render();
+})();
+</script>
+</body>
+</html>
