@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>睡眠统计</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -10,7 +10,7 @@
     background: #0f0f12;
     color: #e8e8e8;
     font-family: 'SF Pro Display', -apple-system, 'PingFang SC', sans-serif;
-    padding: 16px;
+    padding: 12px;
     font-size: 12px;
   }
   .container { max-width: 860px; margin: 0 auto; }
@@ -18,15 +18,15 @@
   /* Header */
   .header {
     display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
   }
   .title { font-size: 14px; font-weight: 600; color: #fff; letter-spacing: 0.04em; }
   .week-nav { display: flex; align-items: center; gap: 8px; }
   .week-label { font-size: 11px; color: #888; min-width: 150px; text-align: center; }
   .nav-btn {
     background: #1e1e24; border: 1px solid #2a2a32; color: #aaa;
-    width: 22px; height: 22px; border-radius: 5px; cursor: pointer;
-    font-size: 13px; display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+    font-size: 14px; display: flex; align-items: center; justify-content: center;
     transition: all 0.15s;
   }
   .nav-btn:hover { background: #2a2a32; color: #fff; }
@@ -36,18 +36,18 @@
 
   /* Chart */
   .chart-wrapper { display: flex; align-items: flex-start; }
-  .y-axis { display: flex; flex-direction: column; padding-top: 18px; flex-shrink: 0; width: 68px; }
+  .y-axis { display: flex; flex-direction: column; padding-top: 18px; flex-shrink: 0; width: 72px; }
   .y-label {
     height: 22px; display: flex; align-items: center; justify-content: flex-end;
-    padding-right: 8px; font-size: 10px; color: #666; cursor: pointer;
-    transition: color 0.15s; gap: 4px; margin-bottom: 2px;
+    padding-right: 8px; font-size: 10px; color: #888; cursor: pointer;
+    transition: color 0.15s; gap: 6px; margin-bottom: 2px;
   }
   .y-label:hover { color: #F5EC00; }
-  .y-date { color: #3a3a3a; font-size: 9px; }
+  .y-date { color: #555; font-size: 9px; }
 
-  .grid-area { flex: 1; overflow-x: auto; }
+  .grid-area { flex: 1; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .x-axis { display: flex; margin-bottom: 2px; height: 18px; min-width: 520px; }
-  .x-label { flex: 1; text-align: center; font-size: 9px; color: #444; }
+  .x-label { flex: 1; text-align: center; font-size: 9px; color: #555; }
 
   .grid { display: flex; flex-direction: column; gap: 2px; min-width: 520px; }
   .grid-row { display: flex; gap: 2px; height: 22px; }
@@ -59,25 +59,36 @@
   .cell-fill {
     position: absolute; top: 0; bottom: 0;
     background: #F5EC00; opacity: 0; pointer-events: none;
+    border-radius: 2px;
   }
-  .cell-fill.active { opacity: 0.85; }
+  .cell-fill.active { opacity: 0.9; background: #F5EC00; }
 
+  /* 格子内文字样式 - 改为浅色，清晰可见 */
   .time-marker {
-    position: absolute; top: 2px; font-size: 7px;
-    color: #0f0f12; font-weight: 700; white-space: nowrap;
+    position: absolute; top: 1px; font-size: 7px;
+    color: #0f0f12; font-weight: 800; white-space: nowrap;
     z-index: 10; pointer-events: none; line-height: 1;
+    background: rgba(245,236,0,0.3);
+    padding: 0 2px;
+    border-radius: 3px;
   }
   .marker-start { left: 2px; }
   .marker-end { right: 2px; }
   .duration-badge {
-    position: absolute; bottom: 2px; right: 2px;
-    font-size: 7px; font-weight: 700; color: #0f0f12;
+    position: absolute; bottom: 1px; right: 2px;
+    font-size: 7px; font-weight: 800; color: #0f0f12;
     pointer-events: none; z-index: 10; line-height: 1;
+    background: rgba(245,236,0,0.5);
+    padding: 0 2px;
+    border-radius: 3px;
   }
   .score-badge {
-    position: absolute; bottom: 2px; left: 2px;
-    font-size: 7px; font-weight: 700; color: #0f0f12;
+    position: absolute; bottom: 1px; left: 2px;
+    font-size: 7px; font-weight: 800; color: #0f0f12;
     pointer-events: none; z-index: 10; line-height: 1;
+    background: rgba(245,236,0,0.5);
+    padding: 0 2px;
+    border-radius: 3px;
   }
 
   /* Stats */
@@ -85,61 +96,80 @@
     display: flex; gap: 16px; margin-top: 12px;
     padding: 10px 14px; background: #1a1a20;
     border-radius: 8px; border: 1px solid #22222a;
+    flex-wrap: wrap;
   }
   .stat-item { display: flex; flex-direction: column; gap: 3px; }
-  .stat-label { font-size: 9px; color: #555; letter-spacing: 0.05em; text-transform: uppercase; }
+  .stat-label { font-size: 9px; color: #666; letter-spacing: 0.05em; text-transform: uppercase; }
   .stat-value { font-size: 13px; font-weight: 600; color: #F5EC00; }
-  .stat-value.dim { color: #777; font-size: 11px; }
+  .stat-value.dim { color: #999; font-size: 11px; }
 
-  /* Modal */
+  /* Modal - 手机优化，不会超出屏幕 */
   .modal-overlay {
     display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.65); z-index: 100;
+    background: rgba(0,0,0,0.75); z-index: 1000;
     align-items: center; justify-content: center;
-    backdrop-filter: blur(3px);
+    backdrop-filter: blur(4px);
+    padding: 16px;
   }
   .modal-overlay.open { display: flex; }
   .modal {
-    background: #16161c; border: 1px solid #2a2a35;
-    border-radius: 12px; padding: 20px; width: 280px;
-    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    background: #1a1a22; border: 1px solid #2e2e3a;
+    border-radius: 20px; padding: 20px; 
+    width: 100%; max-width: 320px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    margin: auto;
   }
-  .modal-title { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 2px; }
-  .modal-subtitle { font-size: 10px; color: #555; margin-bottom: 14px; }
-  .field-group { margin-bottom: 10px; }
-  .field-label { font-size: 9px; color: #777; margin-bottom: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .modal-title { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+  .modal-subtitle { font-size: 11px; color: #777; margin-bottom: 18px; }
+  .field-group { margin-bottom: 14px; }
+  .field-label { font-size: 10px; color: #aaa; margin-bottom: 5px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 500; }
   .field-input {
-    width: 100%; background: #0f0f12; border: 1px solid #2a2a35;
-    border-radius: 6px; color: #fff; font-size: 13px;
-    padding: 7px 10px; outline: none; transition: border-color 0.15s;
+    width: 100%; background: #0f0f12; border: 1px solid #2e2e3a;
+    border-radius: 10px; color: #fff; font-size: 15px;
+    padding: 10px 12px; outline: none; transition: border-color 0.15s;
     font-family: inherit;
   }
   .field-input:focus { border-color: #F5EC00; }
-  .field-hint { font-size: 9px; color: #444; margin-top: 3px; }
-  .modal-actions { display: flex; gap: 6px; margin-top: 14px; }
+  .field-hint { font-size: 9px; color: #555; margin-top: 5px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
   .btn {
-    flex: 1; padding: 8px; border-radius: 6px;
-    font-size: 12px; font-weight: 600; cursor: pointer;
-    border: none; transition: all 0.15s;
+    flex: 1; padding: 10px 0; border-radius: 10px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    border: none; transition: all 0.15s; text-align: center;
   }
   .btn-primary { background: #F5EC00; color: #0f0f12; }
   .btn-primary:hover { background: #ffe900; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-secondary { background: #1e1e28; color: #777; border: 1px solid #2a2a35; }
-  .btn-secondary:hover { color: #fff; }
-  .btn-danger { background: transparent; color: #ff4444; border: 1px solid #ff444422; flex: 0; padding: 8px 10px; font-size: 11px; }
-  .btn-danger:hover { background: #ff444412; }
-  .error-msg { font-size: 10px; color: #ff6b6b; margin-top: 6px; min-height: 14px; }
+  .btn-secondary { background: #25252e; color: #ccc; border: 1px solid #353540; }
+  .btn-secondary:hover { background: #2f2f3a; color: #fff; }
+  .btn-danger { background: transparent; color: #ff6b6b; border: 1px solid #ff6b6b44; flex: 0.5; }
+  .btn-danger:hover { background: #ff6b6b22; }
+  .error-msg { font-size: 10px; color: #ff6b6b; margin-top: 8px; text-align: center; }
+  
+  /* 滚动条美化 */
+  .grid-area::-webkit-scrollbar {
+    height: 4px;
+  }
+  .grid-area::-webkit-scrollbar-track {
+    background: #1c1c22;
+    border-radius: 4px;
+  }
+  .grid-area::-webkit-scrollbar-thumb {
+    background: #3a3a44;
+    border-radius: 4px;
+  }
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
-    <div class="title">睡眠统计</div>
+    <div class="title">💤 睡眠统计</div>
     <div class="week-nav">
-      <button class="nav-btn" id="prevWeek">&#8249;</button>
+      <button class="nav-btn" id="prevWeek">‹</button>
       <div class="week-label" id="weekLabel"></div>
-      <button class="nav-btn" id="nextWeek">&#8250;</button>
+      <button class="nav-btn" id="nextWeek">›</button>
     </div>
   </div>
   <div class="status-bar" id="statusBar"></div>
@@ -163,16 +193,16 @@
     <div class="modal-title" id="modalTitle"></div>
     <div class="modal-subtitle" id="modalSubtitle"></div>
     <div class="field-group">
-      <div class="field-label">入睡时间</div>
-      <input class="field-input" id="inputStart" placeholder="例：22:30" maxlength="5" autocomplete="off">
+      <div class="field-label">🌙 入睡时间</div>
+      <input class="field-input" id="inputStart" placeholder="例如 22:30" maxlength="5" autocomplete="off">
       <div class="field-hint">21:00后为当晚，10:00前为次日</div>
     </div>
     <div class="field-group">
-      <div class="field-label">起床时间</div>
-      <input class="field-input" id="inputEnd" placeholder="例：07:00" maxlength="5" autocomplete="off">
+      <div class="field-label">☀️ 起床时间</div>
+      <input class="field-input" id="inputEnd" placeholder="例如 07:00" maxlength="5" autocomplete="off">
     </div>
     <div class="field-group">
-      <div class="field-label">睡眠评分（0–100）</div>
+      <div class="field-label">⭐ 睡眠评分（0–100）</div>
       <input class="field-input" id="inputScore" placeholder="0 – 100" maxlength="3" autocomplete="off">
     </div>
     <div class="error-msg" id="errorMsg"></div>
@@ -222,21 +252,24 @@ function getWeekDates(m) {
 function dateStr(d) { return d.toISOString().slice(0,10); }
 
 function timeToMins(str) {
+  if (!str) return -1;
   const [h, m] = str.split(':').map(Number);
   let mins = h * 60 + m;
   if (h < 11) mins += 1440;
   return mins - HOUR_START * 60;
 }
 function durationStr(m) {
-  const h = Math.floor(m/60), mm = m%60;
-  return mm > 0 ? `${h}h${mm}m` : `${h}h`;
+  const sign = m < 0 ? -1 : 1;
+  const absM = Math.abs(m);
+  const h = Math.floor(absM/60), mm = absM%60;
+  return (sign === -1 ? '-' : '') + (mm > 0 ? `${h}h${mm}m` : `${h}h`);
 }
 function parseTimeInput(str) {
   str = str.trim();
   if (/^\d{3,4}$/.test(str)) str = str.slice(0,-2)+':'+str.slice(-2);
   if (!/^\d{1,2}:\d{2}$/.test(str)) return null;
   const [h, m] = str.split(':').map(Number);
-  if (h>23||m>59) return null;
+  if (isNaN(h)||isNaN(m)||h>23||m>59) return null;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 
@@ -310,7 +343,7 @@ function render() {
       cell.className = 'cell';
       cell.addEventListener('click', () => openModal(key, di, dateStr(dates[di])));
 
-      if (sm !== null) {
+      if (sm !== null && em !== null && sm >= 0 && em <= HOUR_COUNT*60 && em > sm) {
         const os = Math.max(sm, cs), oe = Math.min(em, ce);
         if (oe > os) {
           const fill = document.createElement('div');
