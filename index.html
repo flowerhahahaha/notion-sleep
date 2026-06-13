@@ -258,7 +258,7 @@ function timeToMins(str) {
   if (!str) return -1;
   const [h, m] = str.split(':').map(Number);
   let mins = h * 60 + m;
-  if (h < 11) mins += 1440;
+  if (h < HOUR_START) mins += 1440;
   return mins - HOUR_START * 60;
 }
 function durationStr(m) {
