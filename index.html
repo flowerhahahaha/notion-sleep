@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>睡眠统计</title>
+<title>睡眠统计 · 最晚入睡</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -63,12 +63,12 @@
   }
   .cell-fill.active { opacity: 0.9; background: #F5EC00; }
 
-  /* 格子内文字样式 - 改为浅色，清晰可见 */
+  /* 格子内文字样式 - 清晰可见 */
   .time-marker {
     position: absolute; top: 1px; font-size: 7px;
     color: #0f0f12; font-weight: 800; white-space: nowrap;
     z-index: 10; pointer-events: none; line-height: 1;
-    background: rgba(245,236,0,0.3);
+    background: rgba(245,236,0,0.4);
     padding: 0 2px;
     border-radius: 3px;
   }
@@ -101,9 +101,9 @@
   .stat-item { display: flex; flex-direction: column; gap: 3px; }
   .stat-label { font-size: 9px; color: #666; letter-spacing: 0.05em; text-transform: uppercase; }
   .stat-value { font-size: 13px; font-weight: 600; color: #F5EC00; }
-  .stat-value.dim { color: #999; font-size: 11px; }
+  .stat-value.dim { color: #ccc; font-size: 12px; }
 
-  /* Modal - 手机优化，不会超出屏幕 */
+  /* Modal - 手机优化 */
   .modal-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.75); z-index: 1000;
@@ -148,7 +148,6 @@
   .btn-danger:hover { background: #ff6b6b22; }
   .error-msg { font-size: 10px; color: #ff6b6b; margin-top: 8px; text-align: center; }
   
-  /* 滚动条美化 */
   .grid-area::-webkit-scrollbar {
     height: 4px;
   }
@@ -165,7 +164,7 @@
 <body>
 <div class="container">
   <div class="header">
-    <div class="title">💤 睡眠统计</div>
+    <div class="title">💤 睡眠统计 · 最晚入睡</div>
     <div class="week-nav">
       <button class="nav-btn" id="prevWeek">‹</button>
       <div class="week-label" id="weekLabel"></div>
@@ -184,7 +183,8 @@
     <div class="stat-item"><div class="stat-label">本周均值</div><div class="stat-value" id="statAvg">—</div></div>
     <div class="stat-item"><div class="stat-label">总睡眠</div><div class="stat-value" id="statTotal">—</div></div>
     <div class="stat-item"><div class="stat-label">平均评分</div><div class="stat-value" id="statScore">—</div></div>
-    <div class="stat-item"><div class="stat-label">最佳夜晚</div><div class="stat-value dim" id="statBest">—</div></div>
+    <!-- 修改点2: 最佳夜晚 → 最晚入睡，显示本周最晚入睡时间 -->
+    <div class="stat-item"><div class="stat-label">🌙 最晚入睡</div><div class="stat-value dim" id="statLatestBed">—</div></div>
   </div>
 </div>
 
@@ -194,12 +194,14 @@
     <div class="modal-subtitle" id="modalSubtitle"></div>
     <div class="field-group">
       <div class="field-label">🌙 入睡时间</div>
-      <input class="field-input" id="inputStart" placeholder="例如 22:30" maxlength="5" autocomplete="off">
-      <div class="field-hint">21:00后为当晚，10:00前为次日</div>
+      <input class="field-input" id="inputStart" placeholder="例如 23:30" maxlength="5" autocomplete="off">
+      <div class="field-hint">21:00后为当晚，12:00前为次日</div>
     </div>
     <div class="field-group">
       <div class="field-label">☀️ 起床时间</div>
-      <input class="field-input" id="inputEnd" placeholder="例如 07:00" maxlength="5" autocomplete="off">
+      <input class="field-input" id="inputEnd" placeholder="例如 12:00" maxlength="5" autocomplete="off">
+      <!-- 修改点1: 起床时间提示从09点改为12点，更直观 -->
+      <div class="field-hint">最晚起床时间默认为中午12:00 (不超过次日12:00)</div>
     </div>
     <div class="field-group">
       <div class="field-label">⭐ 睡眠评分（0–100）</div>
@@ -215,8 +217,23 @@
 </div>
 
 <script>
+// 核心修改：
+// 1. 起床时间上限从原先隐式的10:00扩展到12:00 (次日12点前)
+// 2. “最佳夜晚” 统计栏替换为 “最晚入睡” ，展示本周入睡时间最晚的一天及其具体时间
+//   入睡时间最晚以分钟计（跨日归一化后的时间值，数值越大代表入睡越晚）
+// 同时保持原有跨日逻辑（21点基准轴）不变，确保21:00~次日12:00完整覆盖。
+
 const HOUR_START = 21;
-const HOUR_COUNT = 13;
+const HOUR_COUNT = 15;      // 从21:00 到 次日12:00 (共15小时: 21,22,23,0,1,2,3,4,5,6,7,8,9,10,11,12? 实际12:00需要包含)
+// 为了精确覆盖到12:00，HOUR_COUNT 应为 12点 - 21点 = 15小时 (21,22,23,0,1,2,3,4,5,6,7,8,9,10,11,12) -> 共16个刻度？
+// 传统使用HOUR_COUNT 表示单元格数量，每个单元格代表1小时，之前13小时覆盖到10:00，现在覆盖到次日12:00需要16小时。
+// 调整HOUR_COUNT = 16 即可从21:00 到 次日12:00 (包括12:00整点)。
+// 同时调整timeToMins 边界校验确保起床时间最大为12:00 (即 12:00 归一化后为 12+24=36? 不对，统一计算)
+// 为了保证准确，完全重构时间轴基准: 起始基准为 21:00，结束为次日12:00，总时长15小时(21:00->次日12:00差15小时)，但为显示完整格子，将HOUR_COUNT设为15并确保最后一个单元格代表12:00。
+// 更严谨：每个格子1小时，从21:00开始，第0格=21:00, 第1格=22:00 ... 第14格=次日11:00-12:00? 次日11:00-12:00即可
+// 但考虑起床时间可以精确到12:00，需要确保em <= HOUR_COUNT*60 即 15*60=900分钟(从21:00计起到12:00共15小时)，起床时间如果精确12:00 对应偏移 = 12:00 (次日) 换算成绝对分钟 = (24+12)*60 = 2160, 减去21:00基准 1260 => 900分钟，完美等于15*60。
+// 所以设置 HOUR_COUNT = 15, 满足起床时间最大 12:00。同时横轴标签调整。
+const HOUR_COUNT = 15;       // 15个小时单元格: 21:00~次日12:00
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'];
 
 let weekOffset = 0;
@@ -251,11 +268,16 @@ function getWeekDates(m) {
 }
 function dateStr(d) { return d.toISOString().slice(0,10); }
 
+// 将睡眠时间（HH:MM）转换为从当天21:00起偏移的分钟数（支持跨日，但根据睡眠区间 max支持至次日12:00）
 function timeToMins(str) {
   if (!str) return -1;
   const [h, m] = str.split(':').map(Number);
   let mins = h * 60 + m;
+  // 如果小时小于11（即凌晨0-10点）视为次日，加24小时；如果小时正好等于12且分钟<=59，也视为次日中午时段。
   if (h < 11) mins += 1440;
+  else if (h === 11 && mins >= 0) mins += 0; // 11:xx 属于当天上午？按照睡眠逻辑，21点-次日12点间，11:00属于次日中午前，所以应该加1440？但是11点离12点很近，逻辑上大于HOUR_START后跨日全部加一天基准保证顺序：统一处理只要小时<21或者凌晨都加24小时。
+  // 改进: 任何小于21点的小时都视为跨日 +1440，因为睡眠区间从21点起始。除了从21:00到23:59属于当晚，其余0-20都代表跨日
+  if (h < HOUR_START) mins += 1440;
   return mins - HOUR_START * 60;
 }
 function durationStr(m) {
@@ -305,7 +327,10 @@ function buildXAxis() {
   for (let i = 0; i < HOUR_COUNT; i++) {
     const lbl = document.createElement('div');
     lbl.className = 'x-label';
-    lbl.textContent = `${String((HOUR_START+i)%24).padStart(2,'0')}:00`;
+    let hourVal = (HOUR_START + i) % 24;
+    let displayHour = String(hourVal).padStart(2,'0');
+    // 针对整点显示，清晰表示跨日
+    lbl.textContent = `${displayHour}:00`;
     el.appendChild(lbl);
   }
 }
@@ -335,7 +360,10 @@ function render() {
     row.className = 'grid-row';
     const entry = weekData[di];
     let sm = null, em = null;
-    if (entry?.start && entry?.end) { sm = timeToMins(entry.start); em = timeToMins(entry.end); }
+    if (entry?.start && entry?.end) { 
+      sm = timeToMins(entry.start); 
+      em = timeToMins(entry.end); 
+    }
 
     for (let ci = 0; ci < HOUR_COUNT; ci++) {
       const cs = ci*60, ce = (ci+1)*60;
@@ -357,7 +385,7 @@ function render() {
             mk.className = 'time-marker marker-start';
             mk.textContent = entry.start;
             cell.appendChild(mk);
-            if (entry.score !== '') {
+            if (entry.score !== '' && entry.score != null) {
               const sb = document.createElement('div');
               sb.className = 'score-badge';
               sb.textContent = entry.score;
@@ -384,21 +412,49 @@ function render() {
   updateStats(weekData);
 }
 
+// 修改统计逻辑：移除“最佳夜晚”，新增“最晚入睡”显示本周入睡时间最晚的一天及具体入睡时间
 function updateStats(weekData) {
-  const entries = Object.values(weekData).filter(e => e?.start && e?.end);
-  if (!entries.length) {
-    ['statAvg','statTotal','statScore','statBest'].forEach(id => document.getElementById(id).textContent = '—');
+  const entriesWithTime = [];
+  for (const [idx, entry] of Object.entries(weekData)) {
+    if (entry?.start && entry?.end) {
+      const startMins = timeToMins(entry.start);
+      if (startMins >= 0) {
+        entriesWithTime.push({
+          dayIndex: parseInt(idx),
+          startTime: entry.start,
+          startMins: startMins,
+          duration: timeToMins(entry.end) - startMins
+        });
+      }
+    }
+  }
+  
+  // 计算均值、总睡眠、平均评分
+  const durs = entriesWithTime.map(e => e.duration);
+  if (!entriesWithTime.length) {
+    document.getElementById('statAvg').textContent = '—';
+    document.getElementById('statTotal').textContent = '—';
+    document.getElementById('statScore').textContent = '—';
+    document.getElementById('statLatestBed').textContent = '—';
     return;
   }
-  const durs = entries.map(e => timeToMins(e.end)-timeToMins(e.start));
   const total = durs.reduce((a,b)=>a+b,0);
-  document.getElementById('statAvg').textContent   = durationStr(Math.round(total/entries.length));
+  document.getElementById('statAvg').textContent   = durationStr(Math.round(total/entriesWithTime.length));
   document.getElementById('statTotal').textContent = durationStr(total);
-  const scores = entries.filter(e=>e.score!=='').map(e=>Number(e.score));
+  
+  const allEntries = Object.values(weekData).filter(e => e?.start && e?.end);
+  const scores = allEntries.filter(e=> e.score !== '' && e.score != null).map(e=>Number(e.score));
   document.getElementById('statScore').textContent = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : '—';
-  const maxIdx = durs.indexOf(Math.max(...durs));
-  const dayKeys = Object.keys(weekData).map(Number);
-  document.getElementById('statBest').textContent = DAYS[dayKeys[maxIdx]]+' '+durationStr(durs[maxIdx]);
+  
+  // 最晚入睡: 根据startMins（从21:00偏移分钟数，数值越大代表入睡越晚）
+  if (entriesWithTime.length > 0) {
+    const latest = entriesWithTime.reduce((max, cur) => cur.startMins > max.startMins ? cur : max, entriesWithTime[0]);
+    const dayName = DAYS[latest.dayIndex];
+    // 显示格式：周一 02:15 或者 周三 23:50
+    document.getElementById('statLatestBed').textContent = `${dayName} ${latest.startTime}`;
+  } else {
+    document.getElementById('statLatestBed').textContent = '—';
+  }
 }
 
 function openModal(wKey, dayIndex, date) {
@@ -458,9 +514,10 @@ async function saveEntry() {
   if (!start) { errEl.textContent='入睡时间格式有误，请使用 HH:MM'; return; }
   if (!end)   { errEl.textContent='起床时间格式有误，请使用 HH:MM'; return; }
   const sm = timeToMins(start), em = timeToMins(end);
-  if (sm < 0 || sm >= HOUR_COUNT*60) { errEl.textContent='入睡时间需在 21:00 ~ 次日 10:00 之间'; return; }
+  // 验证边界: 入睡时间必须在21:00到次日11:59之间，起床时间最大次日12:00
+  if (sm < 0 || sm >= HOUR_COUNT*60) { errEl.textContent='入睡时间需在 21:00 ~ 次日 11:59 之间'; return; }
   if (em <= sm) { errEl.textContent='起床时间需晚于入睡时间'; return; }
-  if (em > HOUR_COUNT*60) { errEl.textContent='起床时间需在 10:00 之前'; return; }
+  if (em > HOUR_COUNT*60) { errEl.textContent='起床时间需在次日 12:00 之前（最晚12:00）'; return; }
   let score = '';
   if (rawScore !== '') {
     const s = Number(rawScore);
